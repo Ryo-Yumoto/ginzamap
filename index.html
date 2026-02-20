@@ -739,23 +739,87 @@
     }
 
     /* ══════════════════════════════════════════
-       MOBILE RESPONSIVE
+       PANEL DRAG HANDLE (mobile only)
+    ══════════════════════════════════════════ */
+    .panel-handle {
+      display: none;
+      width: 36px; height: 4px;
+      background: var(--divider);
+      border-radius: 999px;
+      margin: 10px auto 0;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    /* ══════════════════════════════════════════
+       MOBILE RESPONSIVE — Bottom Sheet
     ══════════════════════════════════════════ */
     @media (max-width: 720px) {
+      /* Drag handle visible on mobile */
+      .panel-handle { display: block; }
+
+      /* Panel becomes a bottom sheet */
       #panel {
-        top: 12px; left: 12px;
-        width: calc(100vw - 60px);
-        max-width: 320px;
-        bottom: 12px;
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: 100%;
+        height: 72dvh;
+        border-radius: 20px 20px 0 0;
+        /* Collapsed: peek 62px from bottom */
+        transform: translateY(calc(100% - 62px));
+        /* Override desktop width/bottom transitions */
+        transition: transform .38s cubic-bezier(.4,0,.2,1) !important;
+        box-shadow: 0 -4px 32px rgba(0,0,0,.10), 0 -1px 8px rgba(0,0,0,.06);
       }
+      #panel.mobile-expanded {
+        transform: translateY(0) !important;
+      }
+      /* Minimized state on mobile: same as collapsed */
       #panel.minimized {
-        width: 44px;
-        bottom: calc(100% - 12px - 44px);
+        width: 100% !important;
+        bottom: 0 !important;
+        border-radius: 20px 20px 0 0 !important;
+        transform: translateY(calc(100% - 62px)) !important;
+        cursor: pointer;
+        box-shadow: 0 -4px 32px rgba(0,0,0,.10), 0 -1px 8px rgba(0,0,0,.06) !important;
       }
+      /* Always show panel content on mobile (no fade-out) */
+      #panel.minimized #panel-content {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
+      /* Hide the mini ☰ icon on mobile */
+      #panel-mini { display: none !important; }
+
+      /* Hide desktop minimize button on mobile — topbar tap collapses instead */
+      #sidebar-minimize { display: none; }
+
+      /* Topbar cursor hint */
+      #sidebar-topbar { cursor: pointer; }
+
       #map { width: 100%; }
       #fab { display: none; }
-      #detail { left: 12px; right: 12px; width: auto; bottom: 12px; max-height: 78dvh; border-radius: 20px; }
-      #night-label { top: 66px; }
+
+      /* Detail sheet: full-width bottom sheet, above panel */
+      #detail {
+        left: 0;
+        right: 0;
+        width: 100%;
+        bottom: 0;
+        max-height: 88dvh;
+        border-radius: 20px 20px 0 0;
+        z-index: 1001; /* above panel (1000) */
+      }
+
+      /* Night label stays top-right, clear of panel */
+      #night-label { top: 16px; right: 16px; }
+
+      /* Extra bottom padding for safe area */
+      #spot-list { padding-bottom: max(env(safe-area-inset-bottom, 0px), 32px); }
+      .sheet-cta { margin-bottom: env(safe-area-inset-bottom, 0px); }
     }
 
     /* ══════════════════════════════════════════
@@ -792,14 +856,17 @@
   ══════════════════════════════════════════ -->
   <div id="panel" onclick="handlePanelClick(event)">
 
-    <!-- Mini icon shown when collapsed -->
+    <!-- Drag handle — visible on mobile, tap to toggle -->
+    <div class="panel-handle" onclick="handlePanelClick(event)"></div>
+
+    <!-- Mini icon shown when collapsed (desktop only) -->
     <div id="panel-mini" aria-label="Open panel" title="Open menu">☰</div>
 
     <!-- Full content shown when expanded -->
     <div id="panel-content">
 
-      <!-- Top bar: wordmark + minimize -->
-      <div id="sidebar-topbar">
+      <!-- Top bar: wordmark + minimize (tap anywhere on mobile to collapse) -->
+      <div id="sidebar-topbar" onclick="handleTopbarClick(event)">
         <div class="wordmark" style="margin-bottom:0">
           <span class="wordmark-main" style="font-size:17px">DT Map in Ginza</span>
         </div>
@@ -1463,6 +1530,11 @@ function openDetail(id) {
   document.getElementById('d-tags').innerHTML = s.tags.map(t => `<span class="sheet-tag">${t}</span>`).join('');
   document.getElementById('d-gmaps').href = s.gmaps;
 
+  // On mobile: reset inline left (may have been set by desktop restore), then open
+  if (isMobile()) {
+    document.getElementById('detail').style.left = '';
+    document.getElementById('panel').classList.remove('mobile-expanded');
+  }
   document.getElementById('detail').classList.add('open');
   map.flyTo([s.lat, s.lng], 16, { duration: .7, easeLinearity: .4 });
 
@@ -1485,32 +1557,64 @@ function closeDetail() {
 }
 
 /* ══════════════════════════════════════════
+   MOBILE HELPER
+══════════════════════════════════════════ */
+function isMobile() {
+  return window.innerWidth <= 720;
+}
+
+/* ══════════════════════════════════════════
    PANEL MINIMIZE / RESTORE
-   Single #panel element morphs between full sidebar
-   and a 44×44 button via CSS width/bottom transitions.
+   Desktop: morphs to 44×44 button (width/bottom transitions)
+   Mobile:  slides down as bottom sheet (transform transition)
 ══════════════════════════════════════════ */
 function minimizeSidebar(e) {
-  if (e) e.stopPropagation(); // prevent handlePanelClick from firing
+  if (e) e.stopPropagation();
   const panel  = document.getElementById('panel');
   const detail = document.getElementById('detail');
-  panel.classList.add('minimized');
-  // shift detail panel after panel has shrunk
-  setTimeout(() => { detail.style.left = '20px'; }, 200);
+  if (isMobile()) {
+    panel.classList.remove('mobile-expanded');
+  } else {
+    panel.classList.add('minimized');
+    setTimeout(() => { detail.style.left = '20px'; }, 200);
+  }
 }
 
 function restoreSidebar() {
   const panel  = document.getElementById('panel');
   const detail = document.getElementById('detail');
-  panel.classList.remove('minimized');
-  setTimeout(() => { detail.style.left = '380px'; }, 200);
+  if (isMobile()) {
+    panel.classList.add('mobile-expanded');
+    detail.style.left = ''; // Reset any inline left so CSS takes over
+  } else {
+    panel.classList.remove('minimized');
+    setTimeout(() => { detail.style.left = '380px'; }, 200);
+  }
 }
 
-// Click on the panel when minimized → restore; when full → ignore
+// Click on the panel strip when collapsed → expand
 function handlePanelClick(e) {
   const panel = document.getElementById('panel');
-  if (panel.classList.contains('minimized')) {
-    restoreSidebar();
+  if (isMobile()) {
+    if (!panel.classList.contains('mobile-expanded')) {
+      panel.classList.add('mobile-expanded');
+    }
+  } else {
+    if (panel.classList.contains('minimized')) {
+      restoreSidebar();
+    }
   }
+}
+
+// Tap on topbar when mobile-expanded → collapse
+function handleTopbarClick(e) {
+  if (!isMobile()) return;
+  const panel = document.getElementById('panel');
+  if (panel.classList.contains('mobile-expanded')) {
+    e.stopPropagation(); // prevent handlePanelClick re-expanding
+    panel.classList.remove('mobile-expanded');
+  }
+  // If collapsed, bubble up to handlePanelClick → expands
 }
 
 window.addEventListener('DOMContentLoaded', initMap);
